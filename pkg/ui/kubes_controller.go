@@ -64,7 +64,8 @@ func NewKube(sg *client.Client, w http.ResponseWriter, r *http.Request) error {
 				"n1-standard-8",
 			},
 			"gce_config": map[string]interface{}{
-				"zone": "us-east1-b",
+				"zone":        "us-east1-b",
+				"ssh_pub_key": "",
 			},
 		}
 	default: // just default to AWS if option not provided, or mismatched

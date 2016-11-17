@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/supergiant/supergiant/pkg/core"
+	"github.com/supergiant/supergiant/bindata"
+	//"github.com/supergiant/supergiant/pkg/kubernetes"
 	"github.com/supergiant/supergiant/pkg/model"
 	compute "google.golang.org/api/compute/v1"
 )
@@ -87,6 +89,22 @@ func (p *Provider) CreateKube(m *model.Kube, action *core.Action) error {
 		// Create master(s)
 		count := strconv.Itoa(i)
 		procedure.AddStep("Creating Kubernetes Master Node "+count+"...", func() error {
+
+			// Build template
+			masterUserdataTemplate, err := bindata.Asset("config/providers/gce/master.yaml")
+			if err != nil {
+				return err
+			}
+			masterTemplate, err := template.New("master_template").Parse(string(masterUserdataTemplate))
+			if err != nil {
+				return err
+			}
+			var masterUserdata bytes.Buffer
+			if err = masterTemplate.Execute(&masterUserdata, m); err != nil {
+				return err
+			}
+			userData := string(masterUserdata.Bytes())
+
 			// launch master.
 			role := "master"
 			instance := &compute.Instance{
@@ -102,6 +120,10 @@ func (p *Provider) CreateKube(m *model.Kube, action *core.Action) error {
 						&compute.MetadataItems{
 							Key:   "Role",
 							Value: &role,
+						},
+						&compute.MetadataItems{
+							Key:   "user-data",
+							Value: &userData,
 						},
 					},
 				},

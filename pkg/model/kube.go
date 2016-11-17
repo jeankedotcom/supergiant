@@ -115,4 +115,9 @@ type GCEKubeConfig struct {
 	MinionInstanceGroup string   `json:"instance_group" sg:"readonly"`
 	MasterNodes         []string `json:"master_nodes" sg:"readonly"`
 	KubeMasterCount     int      `json:"kube_master_count"`
+
+	// Template vars
+	SSHPubKey         string `json:"ssh_pub_key" validate:"nonzero"`
+	KubernetesVersion string `json:"kubernetes_version" validate:"nonzero" sg:"default=1.4.3"`
+	ETCDDiscoveryURL  string `json:"etcd_discovery_url" sg:"readonly"`
 }
