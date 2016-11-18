@@ -120,4 +120,5 @@ type GCEKubeConfig struct {
 	SSHPubKey         string `json:"ssh_pub_key" validate:"nonzero"`
 	KubernetesVersion string `json:"kubernetes_version" validate:"nonzero" sg:"default=1.4.3"`
 	ETCDDiscoveryURL  string `json:"etcd_discovery_url" sg:"readonly"`
+	MasterPrivateIP   string `json:"master_private_ip" sg:"readonly"`
 }

@@ -22,10 +22,20 @@ func (p *Provider) DeleteKube(m *model.Kube, action *core.Action) error {
 		return err
 	}
 	// Delete all master nodes.
-	procedure.AddStep("Destroying Kubernetes master(s)...", func() error {
+	procedure.AddStep("Destroying Kubernetes Master(s)...", func() error {
 		for _, master := range m.GCEConfig.MasterNodes {
 			_, err := client.Instances.Delete(m.CloudAccount.Credentials["project_id"], m.GCEConfig.Zone, convInstanceURLtoString(master)).Do()
 			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	procedure.AddStep("Destroying Kubernetes Minions...", func() error {
+		for _, node := range m.Nodes {
+			_, err := client.Instances.Delete(m.CloudAccount.Credentials["project_id"], m.GCEConfig.Zone, convInstanceURLtoString(node.Name)).Do()
+			if err != nil && !strings.Contains(err.Error(), "was not found") && !strings.Contains(err.Error(), "Values must match") {
 				return err
 			}
 		}

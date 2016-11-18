@@ -1,6 +1,8 @@
 package gce
 
 import (
+	"io/ioutil"
+	"net/http"
 	"strings"
 
 	"github.com/supergiant/supergiant/pkg/core"
@@ -29,16 +31,6 @@ func (p *Provider) ValidateAccount(m *model.CloudAccount) error {
 	if err != nil {
 		return err
 	}
-	return nil
-}
-
-// CreateNode creates a new minion on DO kubernetes cluster.
-func (p *Provider) CreateNode(m *model.Node, action *core.Action) error {
-	return nil
-}
-
-// DeleteNode deletes a minsion on a DO kubernetes cluster.
-func (p *Provider) DeleteNode(m *model.Node, action *core.Action) error {
 	return nil
 }
 
@@ -125,4 +117,18 @@ func Client(kube *model.Kube) (*compute.Service, error) {
 func convInstanceURLtoString(url string) string {
 	split := strings.Split(url, "/")
 	return split[len(split)-1]
+}
+
+func etcdToken(num string) (string, error) {
+	resp, err := http.Get("https://discovery.etcd.io/new?size=" + num + "")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
 }

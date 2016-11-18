@@ -1,14 +1,16 @@
 package gce
 
 import (
-	"fmt"
+	"bytes"
 	"strconv"
+	"strings"
+	"text/template"
 	"time"
 
-	"github.com/supergiant/supergiant/pkg/core"
 	"github.com/supergiant/supergiant/bindata"
-	//"github.com/supergiant/supergiant/pkg/kubernetes"
+	"github.com/supergiant/supergiant/pkg/core"
 	"github.com/supergiant/supergiant/pkg/model"
+	"github.com/supergiant/supergiant/pkg/util"
 	compute "google.golang.org/api/compute/v1"
 )
 
@@ -81,15 +83,32 @@ func (p *Provider) CreateKube(m *model.Kube, action *core.Action) error {
 		return nil
 	})
 
+	// Stage items for master build.
+
+	// Default master count to 1
 	if m.GCEConfig.KubeMasterCount == 0 {
 		m.GCEConfig.KubeMasterCount = 1
+	}
+
+	// provision an etcd token
+	url, err := etcdToken(strconv.Itoa(m.GCEConfig.KubeMasterCount))
+	if err != nil {
+		return err
+	}
+
+	// save the token
+	m.GCEConfig.ETCDDiscoveryURL = url
+
+	err = p.Core.DB.Save(m)
+	if err != nil {
+		return err
 	}
 
 	for i := 1; i <= m.GCEConfig.KubeMasterCount; i++ {
 		// Create master(s)
 		count := strconv.Itoa(i)
 		procedure.AddStep("Creating Kubernetes Master Node "+count+"...", func() error {
-
+			err := err
 			// Build template
 			masterUserdataTemplate, err := bindata.Asset("config/providers/gce/master.yaml")
 			if err != nil {
@@ -107,10 +126,14 @@ func (p *Provider) CreateKube(m *model.Kube, action *core.Action) error {
 
 			// launch master.
 			role := "master"
+			name := m.Name + "-master" + "-" + strings.ToLower(util.RandomString(5))
 			instance := &compute.Instance{
-				Name:        m.Name + "-master" + count,
+				Name:        name,
 				Description: "Kubernetes master node for cluster:" + m.Name,
 				MachineType: instType.SelfLink,
+				Tags: &compute.Tags{
+					Items: []string{"https-server"},
+				},
 				Metadata: &compute.Metadata{
 					Items: []*compute.MetadataItems{
 						&compute.MetadataItems{
@@ -133,7 +156,7 @@ func (p *Provider) CreateKube(m *model.Kube, action *core.Action) error {
 						Boot:       true,
 						Type:       "PERSISTENT",
 						InitializeParams: &compute.AttachedDiskInitializeParams{
-							DiskName:    m.Name + "-master" + count + "-root-pd",
+							DiskName:    name + "-root-pd",
 							SourceImage: image.SelfLink,
 						},
 					},
@@ -147,6 +170,15 @@ func (p *Provider) CreateKube(m *model.Kube, action *core.Action) error {
 							},
 						},
 						Network: prefix + "/global/networks/default",
+					},
+				},
+				ServiceAccounts: []*compute.ServiceAccount{
+					{
+						Email: m.CloudAccount.Credentials["client_email"],
+						Scopes: []string{
+							compute.DevstorageFullControlScope,
+							compute.ComputeScope,
+						},
 					},
 				},
 			}
@@ -166,6 +198,8 @@ func (p *Provider) CreateKube(m *model.Kube, action *core.Action) error {
 				// Save Master info when ready
 				if resp.Status == "RUNNING" {
 					m.GCEConfig.MasterNodes = append(m.GCEConfig.MasterNodes, resp.SelfLink)
+					m.MasterPublicIP = resp.NetworkInterfaces[0].AccessConfigs[0].NatIP
+					m.GCEConfig.MasterPrivateIP = resp.NetworkInterfaces[0].NetworkIP
 					if serr := p.Core.DB.Save(m); serr != nil {
 						return false, serr
 					}
@@ -176,7 +210,6 @@ func (p *Provider) CreateKube(m *model.Kube, action *core.Action) error {
 	}
 	procedure.AddStep("Adding Kubernetes master(s) to instance group...", func() error {
 		for _, masterSelfLink := range m.GCEConfig.MasterNodes {
-			fmt.Println("Adding self link:", masterSelfLink)
 			_, err = client.InstanceGroups.AddInstances(
 				m.CloudAccount.Credentials["project_id"],
 				m.GCEConfig.Zone,
@@ -196,6 +229,22 @@ func (p *Provider) CreateKube(m *model.Kube, action *core.Action) error {
 
 		}
 		return nil
+	})
+
+	// Create first minion//
+	procedure.AddStep("creating Kubernetes minion", func() error {
+		// TODO repeated in DO provider
+		if err := p.Core.DB.Find(&m.Nodes, "kube_name = ?", m.Name); err != nil {
+			return err
+		}
+		if len(m.Nodes) > 0 {
+			return nil
+		} //
+		node := &model.Node{
+			KubeName: m.Name,
+			Size:     m.NodeSizes[0],
+		}
+		return p.Core.Nodes.Create(node)
 	})
 
 	return procedure.Run()
