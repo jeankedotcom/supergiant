@@ -155,6 +155,7 @@ coreos:
           --cluster_domain=cluster.local \
           --cloud-provider=gce \
           --config=/etc/kubernetes/manifests \
+          --hostname-override={{ .Name }} \
           --node-ip=$private_ipv4 \
           --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
           --volume-plugin-dir=/etc/kubernetes/volumeplugins \

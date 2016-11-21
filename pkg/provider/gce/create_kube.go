@@ -128,11 +128,12 @@ func (p *Provider) CreateKube(m *model.Kube, action *core.Action) error {
 			role := "master"
 			name := m.Name + "-master" + "-" + strings.ToLower(util.RandomString(5))
 			instance := &compute.Instance{
-				Name:        name,
-				Description: "Kubernetes master node for cluster:" + m.Name,
-				MachineType: instType.SelfLink,
+				Name:         name,
+				Description:  "Kubernetes master node for cluster:" + m.Name,
+				MachineType:  instType.SelfLink,
+				CanIpForward: true,
 				Tags: &compute.Tags{
-					Items: []string{"https-server"},
+					Items: []string{"https-server", "kubernetes"},
 				},
 				Metadata: &compute.Metadata{
 					Items: []*compute.MetadataItems{

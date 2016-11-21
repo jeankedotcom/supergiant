@@ -68,11 +68,12 @@ func (p *Provider) CreateNode(m *model.Node, action *core.Action) error {
 		role := "minion"
 
 		instance := &compute.Instance{
-			Name:        m.Name,
-			Description: "Kubernetes minion node for cluster:" + m.Name,
-			MachineType: instType.SelfLink,
+			Name:         m.Name,
+			Description:  "Kubernetes minion node for cluster:" + m.Name,
+			MachineType:  instType.SelfLink,
+			CanIpForward: true,
 			Tags: &compute.Tags{
-				Items: []string{"https-server"},
+				Items: []string{"https-server", "kubernetes", "kubelet"},
 			},
 			Metadata: &compute.Metadata{
 				Items: []*compute.MetadataItems{
@@ -139,7 +140,7 @@ func (p *Provider) CreateNode(m *model.Node, action *core.Action) error {
 			// Save Master info when ready
 			if resp.Status == "RUNNING" {
 				m.ProviderID = resp.SelfLink
-				m.Name = resp.Name + "." + m.Kube.CloudAccount.Credentials["project_id"] + ".internal"
+				m.Name = resp.Name + ".c." + m.Kube.CloudAccount.Credentials["project_id"] + ".internal"
 				m.ProviderCreationTimestamp = time.Now()
 				if serr := p.Core.DB.Save(m); serr != nil {
 					return false, serr
