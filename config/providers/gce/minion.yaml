@@ -24,6 +24,12 @@ write_files:
         fi
       fi
 
+      curl -sSL -o /opt/bin/cni.tar.gz https://storage.googleapis.com/kubernetes-release/network-plugins/cni-07a8a28637e97b22eb8dfe710eeae1344f69d16e.tar.gz
+      tar xzf "/opt/bin/cni.tar.gz" -C "/opt/bin" --overwrite
+      mv /opt/bin/bin/* /opt/bin
+      rm -r /opt/bin/bin/
+      rm -f "/opt/bin/cni.tar.gz"
+
       cd /tmp
       wget https://github.com/digitalocean/doctl/releases/download/v1.4.0/doctl-1.4.0-linux-amd64.tar.gz
       tar xf /tmp/doctl-1.4.0-linux-amd64.tar.gz
@@ -150,15 +156,27 @@ coreos:
         ExecStartPre=/bin/bash -c "/opt/bin/download-k8s-binary kubelet"
         ExecStart=/opt/bin/kubelet \
           --allow-privileged=true \
+          --enable-debugging-handlers=true \
+          --v=2 \
+          --configure-cbr0=true \
+          --cgroup-root=/ \
+          --system-cgroups=/system \
+          --network-plugin=kubenet \
+          --reconcile-cidr=true \
+          --hairpin-mode=promiscuous-bridge \
+          --babysit-daemons=true \
+          --runtime-cgroups=/docker-daemon \
+          --kubelet-cgroups=/kubelet \
           --api_servers=https://{{ .Kube.GCEConfig.MasterPrivateIP }} \
           --cluster-dns=10.3.0.10 \
           --cluster_domain=cluster.local \
           --cloud-provider=gce \
           --config=/etc/kubernetes/manifests \
-          --hostname-override={{ .Name }} \
           --node-ip=$private_ipv4 \
+          --network-plugin-dir=/opt/bin \
           --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
           --volume-plugin-dir=/etc/kubernetes/volumeplugins \
+          --hostname-override={{ .Name }} \
           --register-node=true \
         Restart=on-failure
         RestartSec=5

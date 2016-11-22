@@ -28,6 +28,15 @@ write_files:
           chmod +x /opt/bin/kubectl
         fi
       fi
+
+      ## Install CNI
+
+      curl -sSL -o /opt/bin/cni.tar.gz https://storage.googleapis.com/kubernetes-release/network-plugins/cni-07a8a28637e97b22eb8dfe710eeae1344f69d16e.tar.gz
+      tar xzf "/opt/bin/cni.tar.gz" -C "/opt/bin" --overwrite
+      mv /opt/bin/bin/* /opt/bin
+      rm -r /opt/bin/bin/
+      rm -f "/opt/bin/cni.tar.gz"
+
       openssl genrsa -out /etc/kubernetes/ssl/ca-key.pem 2048
       openssl req -x509 -new -nodes -key /etc/kubernetes/ssl/ca-key.pem -days 10000 -out /etc/kubernetes/ssl/ca.pem -subj "/CN=kube-ca"
       sed -e "s/\${MASTER_HOST}/$COREOS_PUBLIC_IPV4/" < /etc/kubernetes/ssl/openssl.cnf.template > /etc/kubernetes/ssl/openssl.cnf.public
@@ -54,6 +63,12 @@ write_files:
       /opt/bin/kubectl config use-context default-system
       /opt/bin/kubectl create -f /etc/kubernetes/addons/kube-dns.yaml
       /opt/bin/kubectl create -f /etc/kubernetes/addons/cluster-monitoring
+  - path: "/etc/kubernetes/ssl/gce.conf"
+    permissions: "0755"
+    content: |
+      [global]
+      node-tags = kubernetes-minion
+      node-instance-prefix = {{ .Name }}
   - path: "/etc/kubernetes/ssl/openssl.cnf.template"
     permissions: "0755"
     content: |
@@ -129,6 +144,10 @@ write_files:
           - /hyperkube
           - apiserver
           - --bind-address=0.0.0.0
+          - --v=2
+          - --cloud-provider=gce
+          - --cloud-config=/etc/kubernetes/ssl/gce.conf
+          - --address=127.0.0.1
           - --etcd-servers=http://127.0.0.1:2379
           - --allow-privileged=true
           - --service-cluster-ip-range=10.3.0.0/24
@@ -541,6 +560,10 @@ write_files:
           - --master=http://127.0.0.1:8080
           - --service-account-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem
           - --root-ca-file=/etc/kubernetes/ssl/ca.pem
+          - --v=2
+          - --cloud-provider=gce
+          - --cluster-cidr=10.244.0.0/14
+          - --allocate-node-cidrs=true
           livenessProbe:
             httpGet:
               host: 127.0.0.1
@@ -660,12 +683,23 @@ coreos:
         ExecStartPre=/bin/bash -c "/opt/bin/download-k8s-binary kubelet"
         ExecStartPost=/bin/bash -c "/opt/bin/kube-post-start.sh"
         ExecStart=/opt/bin/kubelet \
-         --api-servers=http://127.0.0.1:8080 \
+         --v=2 \
          --allow-privileged=true \
-         --cadvisor-port=0 \
-         --config=/etc/kubernetes/manifests \
+         --babysit-daemons=true \
+         --cgroup-root=/ \
+         --cloud-provider=gce \
          --cluster-dns=10.3.0.10 \
          --cluster_domain=cluster.local \
+         --config=/etc/kubernetes/manifests \
+         --enable-debugging-handlers=false \
+         --network-plugin-dir=/opt/bin \
+         --network-plugin=kubenet \
+         --reconcile-cidr=false \
+         --configure-cbr0=true \
+         --hairpin-mode=none \
+         --api-servers=http://127.0.0.1:8080 \
+         --pod-cidr=10.123.45.0/29 \
+         --cadvisor-port=0 \
          --register-node=false \
          --cloud-provider=gce \
          --node-ip=$private_ipv4
